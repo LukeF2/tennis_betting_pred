@@ -3,13 +3,13 @@ from collections import defaultdict, deque
 from pathlib import Path
 import streamlit as st
 
-# ---------- Config ----------
 ATP_CLEAN = Path("processed/atp_matches_2000_2024_clean.csv")
 ATP_URL = "https://raw.githubusercontent.com/LukeF2/tennis_betting_pred/main/processed/atp_matches_2000_2024_clean.csv"
+
 BASE_ELO, K_BO3, K_BO5, DECAY = 1500, 32, 48, 0.999
 prefixes = {"de","del","van","von","da","di","la","le"}
 
-# ---------- Helpers ----------
+# ---------- helpers ----------
 def full_to_short(name: str) -> str:
     if not isinstance(name, str): return ""
     name = name.strip().lower()
@@ -45,14 +45,13 @@ def normalize_surface(s) -> str:
 def expected_score(a, b):
     return 1 / (1 + 10 ** ((b - a) / 400))
 
-# ---------- Data load & state build ----------
-@st.cache_resource(show_spinner=True)
+# ---------- load ATP ----------
 def load_atp():
     if ATP_CLEAN.exists():
         return pd.read_csv(ATP_CLEAN)
     return pd.read_csv(ATP_URL)
 
-@st.cache_resource(show_spinner=True)
+# ---------- build Elo/H2H/form (no caching of lambdas) ----------
 def build_state():
     atp = load_atp()
     atp.columns = atp.columns.str.lower()
@@ -92,42 +91,11 @@ def build_state():
         last5[w].append(1); last10[w].append(1)
         last5[l].append(0); last10[l].append(0)
 
-    # return plain dicts (no lambdas)
-    return {
-        "global_elo": dict(global_elo),
-        "hard_elo": dict(hard_elo),
-        "clay_elo": dict(clay_elo),
-        "grass_elo": dict(grass_elo),
-        "h2h": {k: dict(v) for k, v in h2h.items()},
-        "last5": {k: list(v) for k, v in last5.items()},
-        "last10": {k: list(v) for k, v in last10.items()},
-    }
+    return global_elo, surf_map, h2h, last5, last10
 
-state = build_state()
-
-def get_state():
-    ge = defaultdict(lambda: BASE_ELO, state["global_elo"])
-    he = defaultdict(lambda: BASE_ELO, state["hard_elo"])
-    ce = defaultdict(lambda: BASE_ELO, state["clay_elo"])
-    gre = defaultdict(lambda: BASE_ELO, state["grass_elo"])
-    surf_map = {"hard": he, "clay": ce, "grass": gre}
-
-    h2h = defaultdict(lambda: defaultdict(int))
-    for k, v in state["h2h"].items():
-        h2h[k] = defaultdict(int, v)
-
-    last5 = defaultdict(lambda: deque(maxlen=5))
-    for k, v in state["last5"].items():
-        last5[k].extend(v)
-    last10 = defaultdict(lambda: deque(maxlen=10))
-    for k, v in state["last10"].items():
-        last10[k].extend(v)
-
-    return ge, surf_map, h2h, last5, last10
-
-# ---------- Core computation ----------
+# ---------- core computation ----------
 def compute_for_tournament(upload_df: pd.DataFrame, tournament_name: str) -> pd.DataFrame:
-    GLOBAL_ELO, SURF_MAP, H2H, LAST5, LAST10 = get_state()
+    GLOBAL_ELO, SURF_MAP, H2H, LAST5, LAST10 = build_state()
 
     df = upload_df.copy()
     df.columns = [c.strip().lower().replace(" ", "_") for c in df.columns]
