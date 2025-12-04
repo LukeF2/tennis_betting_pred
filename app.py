@@ -3,7 +3,17 @@ from collections import defaultdict, deque
 import streamlit as st
 from pathlib import Path
 
-ATP_CLEAN = "processed/atp_matches_2000_2024_clean.csv"
+
+ATP_CLEAN = Path("processed/atp_matches_2000_2024_clean.csv")
+ATP_URL = "https://raw.githubusercontent.com/<user>/<repo>/<branch>/processed/atp_matches_2000_2024_clean.csv"
+
+@st.cache_data(show_spinner=True)
+def load_atp():
+    if ATP_CLEAN.exists():
+        return pd.read_csv(ATP_CLEAN)
+    # fallback: download from GitHub
+    return pd.read_csv(ATP_URL)
+
 BASE_ELO, K_BO3, K_BO5, DECAY = 1500, 32, 48, 0.999
 prefixes = {"de","del","van","von","da","di","la","le"}
 
